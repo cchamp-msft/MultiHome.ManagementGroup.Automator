@@ -96,7 +96,7 @@ Else
   oBag.AddValue "Status","GOOD"  
 End If
 
-Call oAPI.Return(oMOMBag)
+Call oAPI.Return(oBag)
 
 WScript.Quit()
                                 ]]>
