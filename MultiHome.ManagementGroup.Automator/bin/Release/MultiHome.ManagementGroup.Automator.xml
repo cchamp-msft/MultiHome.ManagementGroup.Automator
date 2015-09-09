@@ -3,7 +3,7 @@
   <Manifest>
     <Identity>
       <ID>MultiHome.ManagementGroup.Automator</ID>
-      <Version>1.0.0.13</Version>
+      <Version>1.0.0.14</Version>
     </Identity>
     <Name>MultiHome.ManagementGroup.Automator</Name>
     <References>
@@ -65,8 +65,14 @@ On Error Resume Next
 
 SetLocale("en-us")
 
-Dim oArgs, MGOp, MGName, ManagementServer, GenerateAlert
-Set oArgs = WScript.Arguments
+Dim oArgs, oAPI, oBag, oMG
+Dim MGOp, MGName, ManagementServer
+
+set oArgs = WScript.Arguments
+set oAPI = CreateObject("MOM.ScriptAPI")
+set oBag = oAPI.CreatePropertyBag()
+set oMG = CreateObject("AgentConfigManager.MgmtSvcCfg")
+
 If oArgs.Count = 3 Then
   MGOp = oArgs(0)
   MGName = oArgs(1)
@@ -78,12 +84,6 @@ Else
    oAPI.LogScriptEvent "MGAutomatorScriptBasedPropertyBag.vbs", 4400, 2, "Parameters were not correct."
    Wscript.Quit -1
 End If
-
-Dim oAPI, oBag, oMG
-
-set oAPI = CreateObject("MOM.ScriptAPI")
-set oBag = oAPI.CreatePropertyBag()
-set oMG = CreateObject("AgentConfigManager.MgmtSvcCfg")
 
 Dim collMG, MGExists
 Set collMG = oMG.GetManagementGroups()
@@ -109,11 +109,11 @@ ElseIf UCase(MGOp) = "REMOVE" Then
 		Err.Clear
 		Call oMG.RemoveManagementGroup(MGName)
 	  Else
-		oAPI.LogScriptEvent "MGAutomatorScriptBasedPropertyBag.vbs", 4400, 1, "Only one management group remains, not removing: " &amp; MGName
+		oAPI.LogScriptEvent "MGAutomatorScriptBasedPropertyBag.vbs", 4400, 2, "Only one management group remains, not removing: " &amp; MGName
 	End If
   End If
 Else
-  oAPI.LogScriptEvent "MGAutomatorScriptBasedPropertyBag.vbs", 4400, 1, "Could not do anything, op type was not add or remove."
+  oAPI.LogScriptEvent "MGAutomatorScriptBasedPropertyBag.vbs", 4400, 2, "Could not do anything, op type was not add or remove."
 End If
 
 If Err.Number &lt;&gt; 0 Then
