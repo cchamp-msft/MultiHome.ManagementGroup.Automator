@@ -3,7 +3,7 @@
   <Manifest>
     <Identity>
       <ID>MultiHome.ManagementGroup.Automator</ID>
-      <Version>1.0.0.12</Version>
+      <Version>1.0.0.13</Version>
     </Identity>
     <Name>MultiHome.ManagementGroup.Automator</Name>
     <References>
@@ -126,7 +126,7 @@ Else
   oBag.AddValue "Status","GOOD"  
 End If
 
-Call oAPI.Return(oMOMBag)
+Call oAPI.Return(oBag)
 
 WScript.Quit()
                                 
