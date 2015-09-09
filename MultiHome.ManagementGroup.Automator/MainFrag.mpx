@@ -1,0 +1,251 @@
+﻿<ManagementPackFragment SchemaVersion="2.0" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <TypeDefinitions>
+    <ModuleTypes>
+      <DataSourceModuleType ID="MGAutomatorScriptBasedPropertyBag" Accessibility="Internal" Batching="false">
+          <Configuration>
+            <xsd:element name="IntervalSeconds" type="xsd:integer" />
+            <xsd:element name="MGOp" type="xsd:string" />
+            <xsd:element name="MGName" type="xsd:string" />
+            <xsd:element name="ManagementServer" type="xsd:string" minOccurs="0" maxOccurs="1" />
+            <xsd:element name="TimeoutSeconds" type="xsd:int" />
+          </Configuration>
+          <OverrideableParameters>
+            <OverrideableParameter ID="IntervalSeconds" Selector="$Config/IntervalSeconds$" ParameterType="int" />
+            <OverrideableParameter ID="MGName" Selector="$Config/MGName$" ParameterType="string" />
+            <OverrideableParameter ID="ManagementServer" Selector="$Config/ManagementServer$" ParameterType="string" />
+            <OverrideableParameter ID="TimeoutSeconds" Selector="$Config/TimeoutSeconds$" ParameterType="int" />
+          </OverrideableParameters>
+          <ModuleImplementation Isolation="Any">
+            <Composite>
+              <MemberModules>
+                <DataSource ID="DS" TypeID="Windows!Microsoft.Windows.TimedScript.PropertyBagProvider">
+                  <IntervalSeconds>$Config/IntervalSeconds$</IntervalSeconds>
+                  <SyncTime />
+                  <ScriptName>MGAutomatorScriptBasedPropertyBag.vbs</ScriptName>
+                  <Arguments>$Config/MGOp$ "$Config/MGName$" $Config/ManagementServer$</Arguments>
+                  <ScriptBody>
+                    <![CDATA[
+' Parameters that should be passed to this script
+' 0 Operation Type - Add/Remove
+' 1 Management Group
+' 2 Management Server (if Op Type = Add)
+
+Option Explicit
+On Error Resume Next
+
+SetLocale("en-us")
+
+Dim oArgs, MGOp, MGName, ManagementServer, GenerateAlert
+Set oArgs = WScript.Arguments
+If oArgs.Count = 3 Then
+  MGOp = oArgs(0)
+  MGName = oArgs(1)
+  ManagementServer = oArgs(2)
+ElseIf oArgs.Count = 2 Then
+  MGOp = oArgs(0)
+  MGName = oArgs(1)
+Else
+   oAPI.LogScriptEvent("MGAutomatorScriptBasedPropertyBag.vbs", 4400, 2, "Parameters were not correct.")
+   Wscript.Quit -1
+End If
+
+Dim oAPI, oBag, oMG
+
+set oAPI = CreateObject("MOM.ScriptAPI")
+set oBag = oAPI.CreatePropertyBag()
+set oMG = CreateObject("AgentConfigManager.MgmtSvcCfg")
+
+Dim collMG, MGExists
+Set collMG = oMG.GetManagementGroups()
+MGExists = 0
+Dim mgItem
+For Each mgItem In collMG
+   If mgItem = MGName Then
+      MGExists = 1
+   End If
+Next
+
+Err.Clear
+If UCase(MGOp) = "Add" Then
+  If MGExists = 0 Then
+    Call oMG.AddManagementGroup(MGName)
+  End If
+ElseIf UCase(MGOp) = "Remove" Then
+  If MGExists = 1 Then
+    Call oMG.RemoveManagementGroup(MGName)
+  End If
+Else
+  oAPI.LogScriptEvent("MGAutomatorScriptBasedPropertyBag.vbs", 4400, 2, "Could not do anything, op type was not add or remove.")
+End If
+
+If Err.Number <> 0 Then
+  Dim ErrMsg
+  ErrMsg = "Could not " & MGOp & " management group. Error " & Err.Number & ": " & Err.Description & " (" & Err.Source & ")."
+  oAPI.LogScriptEvent("MGAutomatorScriptBasedPropertyBag.vbs", 4400, 1, ErrMsg)
+  oBag.AddValue("Status","BAD")
+  oBag.AddValue("Details",ErrMsg)
+Else
+  oBag.AddValue("Status","GOOD")
+End If
+
+Call oAPI.Return(oMOMBag)
+
+WScript.Quit()
+                                ]]>
+                  </ScriptBody>
+                  <TimeoutSeconds>60</TimeoutSeconds>
+                </DataSource>
+              </MemberModules>
+              <Composition>
+                <Node ID="DS" />
+              </Composition>
+            </Composite>
+          </ModuleImplementation>
+          <OutputType>System!System.PropertyBagData</OutputType>
+        </DataSourceModuleType>
+    </ModuleTypes>
+  </TypeDefinitions>
+  <Monitoring>
+    <Rules>
+      <Rule ID="MultiHome.ManagementGroup.Automator.AddMGRule" Enabled="false" Target="SC!Microsoft.SystemCenter.ManagedComputer" ConfirmDelivery="false" Remotable="false" Priority="Normal" DiscardLevel="100">
+        <Category>Custom</Category>
+        <DataSources>
+          <DataSource ID="DS" TypeID="MGAutomatorScriptBasedPropertyBag">
+            <IntervalSeconds>3600</IntervalSeconds>
+            <MGOp>Add</MGOp>
+            <MGName>ManagementGroupName</MGName>
+            <ManagementServer>ms.fqdn.com</ManagementServer>
+            <TimeoutSeconds>60</TimeoutSeconds>
+          </DataSource>
+        </DataSources>
+        <ConditionDetection ID="CD" TypeID="System!System.ExpressionFilter">
+          <Expression>
+            <And>
+              <Expression>
+                <SimpleExpression>
+                  <ValueExpression>
+                    <XPathQuery Type="String">Status</XPathQuery>
+                  </ValueExpression>
+                  <Operator>Equal</Operator>
+                  <ValueExpression>
+                    <Value Type="String">BAD</Value>
+                  </ValueExpression>
+                </SimpleExpression>
+              </Expression>
+              <Expression>
+                <SimpleExpression>
+                  <ValueExpression>
+                    <Value Type="String">True</Value>
+                  </ValueExpression>
+                  <Operator>Equal</Operator>
+                  <ValueExpression>
+                    <Value Type="String">True</Value>
+                  </ValueExpression>
+                </SimpleExpression>
+              </Expression>
+            </And>
+          </Expression>
+        </ConditionDetection>
+        <WriteActions>
+          <WriteAction ID="WA" TypeID="Health!System.Health.GenerateAlert">
+            <Priority>1</Priority>
+            <Severity>2</Severity>
+            <AlertMessageId>$MPElement[Name="AddMGAlertMessage"]$</AlertMessageId>
+            <AlertParameters>
+              <AlertParameter1>$Data/Property[@Name='Details']$</AlertParameter1>
+            </AlertParameters>
+            <Suppression>
+              <SuppressionValue>$Target/Property[Type="System!System.Entity"]/DisplayName$</SuppressionValue>
+              <SuppressionValue>$Data/Property[@Name='Details']$</SuppressionValue>
+            </Suppression>
+          </WriteAction>
+        </WriteActions>
+      </Rule>
+      <Rule ID="MultiHome.ManagementGroup.Automator.RemoveMGRule" Enabled="false" Target="SC!Microsoft.SystemCenter.ManagedComputer" ConfirmDelivery="false" Remotable="false" Priority="Normal" DiscardLevel="100">
+        <Category>Custom</Category>
+        <DataSources>
+          <DataSource ID="DS" TypeID="MGAutomatorScriptBasedPropertyBag">
+            <IntervalSeconds>3600</IntervalSeconds>
+            <MGOp>Remove</MGOp>
+            <MGName>ManagementGroupName</MGName>
+            <TimeoutSeconds>60</TimeoutSeconds>
+          </DataSource>
+        </DataSources>
+        <ConditionDetection ID="CD" TypeID="System!System.ExpressionFilter">
+          <Expression>
+            <And>
+              <Expression>
+                <SimpleExpression>
+                  <ValueExpression>
+                    <XPathQuery Type="String">Status</XPathQuery>
+                  </ValueExpression>
+                  <Operator>Equal</Operator>
+                  <ValueExpression>
+                    <Value Type="String">BAD</Value>
+                  </ValueExpression>
+                </SimpleExpression>
+              </Expression>
+              <Expression>
+                <SimpleExpression>
+                  <ValueExpression>
+                    <Value Type="String">True</Value>
+                  </ValueExpression>
+                  <Operator>Equal</Operator>
+                  <ValueExpression>
+                    <Value Type="String">True</Value>
+                  </ValueExpression>
+                </SimpleExpression>
+              </Expression>
+            </And>
+          </Expression>
+        </ConditionDetection>
+        <WriteActions>
+          <WriteAction ID="WA" TypeID="Health!System.Health.GenerateAlert">
+            <Priority>1</Priority>
+            <Severity>2</Severity>
+            <AlertMessageId>$MPElement[Name="RemoveMGAlertMessage"]$</AlertMessageId>
+            <AlertParameters>
+              <AlertParameter1>$Data/Property[@Name='Details']$</AlertParameter1>
+            </AlertParameters>
+            <Suppression>
+              <SuppressionValue>$Target/Property[Type="System!System.Entity"]/DisplayName$</SuppressionValue>
+              <SuppressionValue>$Data/Property[@Name='Details']$</SuppressionValue>
+            </Suppression>
+          </WriteAction>
+        </WriteActions>
+      </Rule>
+    </Rules>    
+  </Monitoring>
+  <Presentation>
+    <StringResources>
+      <StringResource ID="AddMGAlertMessage" />
+      <StringResource ID="RemoveMGAlertMessage" />      
+    </StringResources>
+  </Presentation>
+  <LanguagePacks>
+    <LanguagePack ID="ENU" IsDefault="true">
+      <DisplayStrings>
+        <DisplayString ElementID="MultiHome.ManagementGroup.Automator">
+          <Name>Multi-Home Management Group Automator</Name>
+          <Description>This management pack contains two disabled VBS script-based rules--one to add a Management Group to an agent, and one to remove a Management Group an agent. Override enable with the appropriate MG name to perform the needed operation. Note: It is not recommended to remove the MG that you are configuring the Remove MG Rule in.</Description>
+        </DisplayString>
+        <DisplayString ElementID="AddMGAlertMessage">
+          <Name>Multi-home automation encountered a problem adding a management group</Name>
+          <Description>{0}</Description>
+        </DisplayString>
+        <DisplayString ElementID="MultiHome.ManagementGroup.Automator.AddMGRule">
+          <Name>Multi-Home Add MG Rule</Name>
+          <Description>This rule will add a management group to an agent's configuration.</Description>
+        </DisplayString>
+        <DisplayString ElementID="RemoveMGAlertMessage">
+          <Name>Multi-home automation encountered a problem removing a management group</Name>
+          <Description>{0}</Description>
+        </DisplayString>
+        <DisplayString ElementID="MultiHome.ManagementGroup.Automator.RemoveMGRule">
+          <Name>Multi-Home Remove MG Rule</Name>
+          <Description>This rule will remove a management group from an agent's configuration. Note: It is not recommended to remove the MG that you are configuring the Remove MG Rule in.</Description>
+        </DisplayString>
+      </DisplayStrings>
+    </LanguagePack>
+  </LanguagePacks>  
+</ManagementPackFragment>
