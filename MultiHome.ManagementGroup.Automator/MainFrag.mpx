@@ -45,7 +45,7 @@ ElseIf oArgs.Count = 2 Then
   MGOp = oArgs(0)
   MGName = oArgs(1)
 Else
-   oAPI.LogScriptEvent("MGAutomatorScriptBasedPropertyBag.vbs", 4400, 2, "Parameters were not correct.")
+   oAPI.LogScriptEvent "MGAutomatorScriptBasedPropertyBag.vbs", 4400, 2, "Parameters were not correct."
    Wscript.Quit -1
 End If
 
@@ -60,32 +60,40 @@ Set collMG = oMG.GetManagementGroups()
 MGExists = 0
 Dim mgItem
 For Each mgItem In collMG
-   If mgItem = MGName Then
+   If UCase(mgItem.ManagementGroupName) = UCase(MGName) Then
       MGExists = 1
+	  'oAPI.LogScriptEvent "MGAutomatorScriptBasedPropertyBag.vbs", 4400, 0, "MG " & MGName & " exists."
    End If
 Next
 
-Err.Clear
-If UCase(MGOp) = "Add" Then
+If UCase(MGOp) = "ADD" Then
   If MGExists = 0 Then
-    Call oMG.AddManagementGroup(MGName)
+    oAPI.LogScriptEvent "MGAutomatorScriptBasedPropertyBag.vbs", 4400, 0, "Adding management group " & MGName & " with management server " & ManagementServer
+	Err.Clear
+    Call oMG.AddManagementGroup(MGName,ManagementServer,5723)	
   End If
-ElseIf UCase(MGOp) = "Remove" Then
+ElseIf UCase(MGOp) = "REMOVE" Then
   If MGExists = 1 Then
-    Call oMG.RemoveManagementGroup(MGName)
+	If collMG.Count > 1 Then
+		oAPI.LogScriptEvent "MGAutomatorScriptBasedPropertyBag.vbs", 4400, 0, "Removing management group " & MGName
+		Err.Clear
+		Call oMG.RemoveManagementGroup(MGName)
+	  Else
+		oAPI.LogScriptEvent "MGAutomatorScriptBasedPropertyBag.vbs", 4400, 1, "Only one management group remains, not removing: " & MGName
+	End If
   End If
 Else
-  oAPI.LogScriptEvent("MGAutomatorScriptBasedPropertyBag.vbs", 4400, 2, "Could not do anything, op type was not add or remove.")
+  oAPI.LogScriptEvent "MGAutomatorScriptBasedPropertyBag.vbs", 4400, 1, "Could not do anything, op type was not add or remove."
 End If
 
 If Err.Number <> 0 Then
   Dim ErrMsg
-  ErrMsg = "Could not " & MGOp & " management group. Error " & Err.Number & ": " & Err.Description & " (" & Err.Source & ")."
-  oAPI.LogScriptEvent("MGAutomatorScriptBasedPropertyBag.vbs", 4400, 1, ErrMsg)
-  oBag.AddValue("Status","BAD")
-  oBag.AddValue("Details",ErrMsg)
+  ErrMsg = "Could not " & MGOp & " management group: " & Err.Description
+  oAPI.LogScriptEvent "MGAutomatorScriptBasedPropertyBag.vbs", 4400, 1, ErrMsg
+  oBag.AddValue "Status","BAD"
+  oBag.AddValue "Details",ErrMsg
 Else
-  oBag.AddValue("Status","GOOD")
+  oBag.AddValue "Status","GOOD"  
 End If
 
 Call oAPI.Return(oMOMBag)
